@@ -202,6 +202,7 @@ class Entry(Base):
             self.slug = slugify(self.title)
         super(Entry, self).save(*args, **kwargs)
 
+    @models.permalink
     def get_absolute_url(self):
         entry_dict = {'year': "%04d" %self.published_on.year,
                       'month': "%02d" %self.published_on.month,
@@ -209,7 +210,13 @@ class Entry(Base):
                       'slug': self.slug}
                       # TODO support application content integration:
         #return reverse('elephantblog.urls/elephantblog.views.entry', kwargs=entry_dict)
-        return reverse('elephantblog.views.entry', kwargs=entry_dict)
+        #return ('elphantblog.views.entry', (), {'year': "%04d" %self.published_on.year,
+        #              'month': "%02d" %self.published_on.month,
+        #              'day': "%02d" %self.published_on.day,
+        #              'slug': self.slug})
+
+        #return reverse('elephantblog.views.entry', kwargs=entry_dict)
+        return ('elephantblog.urls/elephantblog_entry_detail',(),  entry_dict)
 
     @classmethod
     def register_extension(cls, register_fn):
@@ -268,7 +275,7 @@ class EntryAdmin(editor.ItemEditor):
         }
 
     show_on_top = ['title', 'published', 'categories']
-    raw_id_fields = []
+    #raw_id_fields = []
 
 
     ping_again = entry_admin_update_fn(_('queued'), {'pinging': Entry.QUEUED})
