@@ -9,6 +9,7 @@ from feincms.translations import short_language_code
 
 
 from feincms.views.generic import list_detail
+from feincms.views.decorators import *
 
 from models import Entry
 import settings
@@ -30,17 +31,19 @@ def entry(request, year, month, day, slug, language_code=None, **kwargs):
                          'date': date(int(year), int(month),int(day)),
                          'comments' : settings.BLOG_COMMENTS
                          }
-        return render_to_response('blog/entry_detail.html', extra_contest, 
+        template_name = kwargs.get('template_name')
+        template = 'blog/entry_detail.html'
+        if template_name:
+            template = template_name
+        return render_to_response(template, extra_contest, 
                                   context_instance=RequestContext(request))
 
 """ Date views use object_list generic view due to pagination """
-
-
 def entry_list(request, category=None, year=None, month=None, day=None, page=0, 
                paginate_by=10, template_name='blog/entry_list.html', 
                language_code=None, **kwargs):
     
-    extra_context = {}
+    extra_context = getattr(kwargs, 'extra_context', {}) 
     if language_code:
         queryset = Entry.objects.active().filter(language=language_code)
     else:
@@ -70,15 +73,17 @@ def entry_list(request, category=None, year=None, month=None, day=None, page=0,
     
     extra_context.update({'date':date(int(year), int(month), int(day)),
                           'comments' : settings.BLOG_COMMENTS})
+    extra_context.update({'feincms_page': Page.objects.best_match_for_request(request)})
+
+
     
     if settings.BLOG_LIST_PAGINATION:
         paginate_by = settings.BLOG_LIST_PAGINATION
-    
     return list_detail.object_list(
       request,
       queryset = queryset,
       paginate_by = paginate_by,
-      page = page,
+      #page = page,
       template_name = template_name,
       extra_context = extra_context,
       **kwargs)
