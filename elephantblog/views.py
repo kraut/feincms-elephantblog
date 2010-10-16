@@ -31,6 +31,9 @@ def entry(request, year, month, day, slug, language_code=None, **kwargs):
                          'date': date(int(year), int(month),int(day)),
                          'comments' : settings.BLOG_COMMENTS
                          }
+        # Needed if its used as ApplicationContext:
+        # Than you can specify a different template for using it as AppContent
+        # or using it standalone.
         template_name = kwargs.get('template_name')
         template = 'blog/entry_detail.html'
         if template_name:
@@ -73,10 +76,7 @@ def entry_list(request, category=None, year=None, month=None, day=None, page=0,
     
     extra_context.update({'date':date(int(year), int(month), int(day)),
                           'comments' : settings.BLOG_COMMENTS})
-    extra_context.update({'feincms_page': Page.objects.best_match_for_request(request)})
 
-
-    
     if settings.BLOG_LIST_PAGINATION:
         paginate_by = settings.BLOG_LIST_PAGINATION
     return list_detail.object_list(

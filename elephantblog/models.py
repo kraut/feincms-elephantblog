@@ -208,14 +208,7 @@ class Entry(Base):
                       'month': "%02d" %self.published_on.month,
                       'day': "%02d" %self.published_on.day,
                       'slug': self.slug}
-                      # TODO support application content integration:
-        #return reverse('elephantblog.urls/elephantblog.views.entry', kwargs=entry_dict)
-        #return ('elphantblog.views.entry', (), {'year': "%04d" %self.published_on.year,
-        #              'month': "%02d" %self.published_on.month,
-        #              'day': "%02d" %self.published_on.day,
-        #              'slug': self.slug})
 
-        #return reverse('elephantblog.views.entry', kwargs=entry_dict)
         return ('elephantblog.urls/elephantblog_entry_detail',(),  entry_dict)
 
     @classmethod
