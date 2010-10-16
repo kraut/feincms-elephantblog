@@ -54,7 +54,7 @@ class Category(models.Model, TranslatedObjectMixin):
             return _('Unnamed Category')
 
     def entries(self):
-        return Entry.objects.filter(categories=self, language=get_language()).count()
+        return Entry.objects.filter(categories=self).count()#, language=get_language() error launching Admin Category list
     entries.short_description = _('Blog entries in category')
         
 
