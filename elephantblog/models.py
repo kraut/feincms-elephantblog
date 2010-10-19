@@ -7,9 +7,11 @@ from django.core.validators import ValidationError
 from django.db import models
 from django.db.models import signals, Q
 from django.template.defaultfilters import slugify
+from django.utils.encoding import force_unicode
 from django.utils.translation import ugettext_lazy as _, ugettext, \
     get_language, ungettext
 
+import mptt
 from feincms.admin import editor
 from feincms.management.checker import check_database_schema
 from feincms.models import Base
@@ -19,6 +21,7 @@ from feincms.content.application.models import reverse
 from feincms.module.page.extensions.navigation import NavigationExtension,\
     PagePretender
 
+from feincms.contrib.fields import ImproveRawIdFieldsForm
 
 """
 Category is language-aware and connected to the Entry model via a many to many relationship.
@@ -29,10 +32,21 @@ Disqus: http://github.com/arthurk/django-disqus
 Pinging: http://github.com/matthiask/pinging
 Tagging: http://code.google.com/p/django-tagging/
 """
+try:
+    from mptt.models import MPTTModel as base
+    mptt_register = False
+except ImportError, e:
+    base = models.Model
+    mptt_register = True
 
-class Category(models.Model, TranslatedObjectMixin):
+class Category(base, TranslatedObjectMixin):
 
     ordering = models.SmallIntegerField(_('ordering'), default=0)
+
+    parent = models.ForeignKey('self', blank=True, null=True, related_name='children')
+
+    def __init__(self, *a, **kw):
+        base.__init__(self, *a, **kw)
 
     def __unicode__(self):
         trans = None
@@ -49,22 +63,29 @@ class Category(models.Model, TranslatedObjectMixin):
                 pass
 
         if trans:
-            return trans
+
+            title= trans
         else:
-            return _('Unnamed Category')
+            title= _('Unnamed Category')
+
+        ancestors = self.get_ancestors()
+        return ' > '.join([force_unicode(i.translation.title) for i in ancestors]+[title,])
+
 
     def entries(self):
         return Entry.objects.filter(categories=self).count()#, language=get_language() error launching Admin Category list
     entries.short_description = _('Blog entries in category')
-        
 
+        
     objects = TranslatedObjectManager()
 
     class Meta:
         verbose_name = _('category')
         verbose_name_plural = _('categories')
-        ordering = ['-ordering',]
+        #ordering = ['-ordering',]
+        ordering = ['tree_id', 'lft']
 
+mptt.register(Category)
 
 class CategoryTranslation(Translation(Category)):
     title = models.CharField(_('category title'), max_length=100)
@@ -92,14 +113,14 @@ class CategoryTranslationInline(admin.StackedInline):
         'slug': ('title',),
         }
 
-class CategoryAdmin(admin.ModelAdmin):
+from feincms.admin import editor
+class CategoryAdmin(editor.TreeEditor):
     list_display = ['__unicode__', 'entries']
     search_fields     = ['translations__title']
+    list_filter = ('parent',)
     inlines           = [CategoryTranslationInline]
 
-
-
-
+#from categories.models import Category
 class EntryManager(models.Manager):
 
     # A list of filters which are used to determine whether a page is active or not.
@@ -257,8 +278,14 @@ def entry_admin_update_fn(new_state, new_state_dict):
             rows_updated) % {'state': new_state, 'count': rows_updated})
     return _fn
 
+from django.forms import ModelForm
+#from ajax_select.fields import AutoCompleteSelectMultipleField
+from tagging.fields import TagField
+class EntryForm(ModelForm):
+    #tags = AutoCompleteSelectMultipleField('tags', required=False) 
+    tags = TagField() 
 
-class EntryAdmin(editor.ItemEditor):
+class EntryAdmin(editor.ItemEditor,  ImproveRawIdFieldsForm):
     date_hierarchy = 'published_on'
     list_display = ['__unicode__', 'published', 'last_changed', 'isactive', 'active_status', 'published_on', 'user', 'pinging']
     list_filter = ('published','published_on')
@@ -266,11 +293,12 @@ class EntryAdmin(editor.ItemEditor):
     prepopulated_fields = {
         'slug': ('title',),
         }
-
+    
+    filter_horizontal =('categories',)
     show_on_top = ['title', 'published', 'categories']
     #raw_id_fields = []
 
-
+    form = EntryForm
     ping_again = entry_admin_update_fn(_('queued'), {'pinging': Entry.QUEUED})
     ping_again.short_description = _('ping again')
 
@@ -306,6 +334,6 @@ class CategoriesNavigationExtension(NavigationExtension):
     def children(self, page, **kwargs):
         for category in Category.objects.all():
             yield PagePretender(
-                title=category.translation.title,
+                title=category.translation.name,
                 url='%scategory/%s/' % (page.get_absolute_url(), category.translation.slug)
                 )
