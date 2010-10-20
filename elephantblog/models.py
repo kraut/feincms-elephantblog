@@ -42,7 +42,6 @@ except ImportError, e:
 class Category(base, TranslatedObjectMixin):
 
     #ordering = models.SmallIntegerField(_('ordering'), default=0)
-
     parent = models.ForeignKey('self', blank=True, null=True, related_name='children')
 
     def __init__(self, *a, **kw):
@@ -126,7 +125,7 @@ class CategoryTranslation(Translation(Category)):
     def __unicode__(self):
         return self.title
     def save(self, *args, **kwargs):
-        if self.slug:
+        if not self.slug:
             self.slug = slugify(self.title) 
 
         super(CategoryTranslation, self).save(*args, **kwargs)
@@ -138,7 +137,6 @@ class CategoryTranslationInline(admin.StackedInline):
         'slug': ('title',),
         }
 
-from feincms.admin import editor
 
 class CategoryAdmin(editor.TreeEditor):
     list_display = ['__unicode__', 'entries']
@@ -178,7 +176,7 @@ class EntryManager(models.Manager):
 
 class Entry(Base):
     """
-    Entries with a published status of greater than 50 are displayed. If the current date is within the published date range.
+    Entries with a published status of greater equal 50 are displayed. If the current date is within the published date range.
     """
     DELETED = 10
     INACTIVE = 30

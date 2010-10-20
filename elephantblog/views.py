@@ -91,13 +91,15 @@ def entry_list(request, category=None, year=None, month=None, day=None, page=0,
       extra_context = extra_context,
       **kwargs)
    
-def browse_entries(request, category_name='', year=None, month=None, day=None, page=0, 
-               paginate_by=10, template_name='blog/category_list.html', 
-               entry_template_name= 'blog/entry_list.html', limit=None,
+def browse_entries(request, category_name='', year=None, month=None, day=None,
+               paginate_by=10, template_name='blog/category_list.html', limit=None,
                language_code=None, **kwargs):
     '''  
-        Lets the user browse through the hierarchically blog categieres.
-        Entry list is shown only if the category to show has now children-categories.
+        Lets the user browse through the hierarchically blog categories.
+        Shows sub categories and blog entries of given category-slug.
+
+        @param category_name: category_slug would be a better name ;)
+        @param year, month, day, limit are currently UNUSED!
     '''
     categories = category_name[:-1].split('/')
     deepest_cat = categories[-1:][0]
@@ -122,28 +124,22 @@ def browse_entries(request, category_name='', year=None, month=None, day=None, p
         #toplevel category list
         queryset = Category.objects.filter(level=0)
     else:
-
         category = Category.objects.get(**filer_dict)
         extra_context['curr_category']=category
-        #if category.get_children().count()>0:
-            #list sub categorie s
-        from django.db.models import Count, Q
 
-        queryset = category.get_children()#.annotate(entry_count=Count('blogpost')).annotate(child_count=Count('children')).filter(~Q(child_count=0)| ~Q(entry_count=0) )
-        #queryset = category.get_children().annotate(entry_count=Count('blogpost')).filter(entry_count__gt=0)
-        #else:
+        queryset = category.get_children()
+
         #list entries of category
         try:
             language_code = request._feincms_page.language
             extra_context['entry_list'] = Entry.objects.active().filter(language=language_code)
         except (AttributeError, FieldError):
             extra_context['entry_list']=Entry.objects.active().filter(categories__id =category.id)
-        #queryset = Entry.objects.active().filter(language=language_code)
-        #template_name = entry_template_name
 
     return list_detail.object_list(
             request,
             queryset=queryset,
+            paginate_by = paginate_by,
             template_name=template_name,
             extra_context=extra_context,
             **kwargs)
