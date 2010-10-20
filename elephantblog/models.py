@@ -91,7 +91,7 @@ class Category(base, TranslatedObjectMixin):
     def get_absolute_url(self):
         str =[]
         def cat_path(cat):
-            str.append(cat.translation.title)
+            str.append(cat.translation.slug)
             if cat.parent:
                 cat_path(cat.parent)
         cat_path(self)
