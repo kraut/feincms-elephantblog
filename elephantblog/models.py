@@ -41,7 +41,7 @@ except ImportError, e:
 
 class Category(base, TranslatedObjectMixin):
 
-    ordering = models.SmallIntegerField(_('ordering'), default=0)
+    #ordering = models.SmallIntegerField(_('ordering'), default=0)
 
     parent = models.ForeignKey('self', blank=True, null=True, related_name='children')
 
@@ -63,7 +63,6 @@ class Category(base, TranslatedObjectMixin):
                 pass
 
         if trans:
-
             title= trans
         else:
             title= _('Unnamed Category')
@@ -72,11 +71,38 @@ class Category(base, TranslatedObjectMixin):
         return ' > '.join([force_unicode(i.translation.title) for i in ancestors]+[title,])
 
 
-    def entries(self):
+    def entry_count(self):
         return Entry.objects.filter(categories=self).count()#, language=get_language() error launching Admin Category list
+    entries=entry_count # former its was called entries
+                      # for downward compatibility support the old name, too.
+
+    def entry_count_deep(self):
+        ''' Returns number of entries in this category plus
+            number of entries in all sub-categories.
+            I think this is the default WordPress behaviour.
+        '''
+        entries = self.entry_count()
+        for child in self.get_children():
+            entries += child.entry_count_deep()
+        return entries
+
     entries.short_description = _('Blog entries in category')
 
-        
+    @models.permalink
+    def get_absolute_url(self):
+        str =[]
+        def cat_path(cat):
+            str.append(cat.translation.title)
+            if cat.parent:
+                cat_path(cat.parent)
+        cat_path(self)
+        str.reverse()
+
+        cat_url = '/'.join(str)+'/'
+               
+        args = {'category_name': cat_url, }
+        return ('elephantblog.urls/browse_categories',(),  args)
+
     objects = TranslatedObjectManager()
 
     class Meta:
@@ -84,8 +110,8 @@ class Category(base, TranslatedObjectMixin):
         verbose_name_plural = _('categories')
         #ordering = ['-ordering',]
         ordering = ['tree_id', 'lft']
-
-mptt.register(Category)
+if mptt_register:
+    mptt.register(Category)
 
 class CategoryTranslation(Translation(Category)):
     title = models.CharField(_('category title'), max_length=100)
@@ -99,10 +125,9 @@ class CategoryTranslation(Translation(Category)):
 
     def __unicode__(self):
         return self.title
-
     def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.title)
+        if self.slug:
+            self.slug = slugify(self.title) 
 
         super(CategoryTranslation, self).save(*args, **kwargs)
 
@@ -114,13 +139,13 @@ class CategoryTranslationInline(admin.StackedInline):
         }
 
 from feincms.admin import editor
+
 class CategoryAdmin(editor.TreeEditor):
     list_display = ['__unicode__', 'entries']
     search_fields     = ['translations__title']
     list_filter = ('parent',)
     inlines           = [CategoryTranslationInline]
 
-#from categories.models import Category
 class EntryManager(models.Manager):
 
     # A list of filters which are used to determine whether a page is active or not.
@@ -150,11 +175,11 @@ class EntryManager(models.Manager):
     def featured(self):
         return self.published().filter(published=self.model.FRONT_PAGE)
 
-"""
-Entries with a published status of greater than 50 are displayed. If the current date is within the published date range.
-"""
 
 class Entry(Base):
+    """
+    Entries with a published status of greater than 50 are displayed. If the current date is within the published date range.
+    """
     DELETED = 10
     INACTIVE = 30
     NEEDS_REEDITING = 40
@@ -210,7 +235,8 @@ class Entry(Base):
         return self.title
 
     def save(self, *args, **kwargs):
-        if self.published >= self.CLEARED and self._old_published < self.CLEARED and self.published_on.date() <= datetime.now().date(): # only sets the publish date if the entry is published
+        if self.published >= self.CLEARED and self._old_published < self.CLEARED and self.published_on.date() <= datetime.now().date(): 
+            # only sets the publish date if the entry is published
             self.published_on = datetime.now()
             self.pinging = self.QUEUED
         elif self.is_active and self.pinging < self.QUEUED:
@@ -296,7 +322,6 @@ class EntryAdmin(editor.ItemEditor,  ImproveRawIdFieldsForm):
     
     filter_horizontal =('categories',)
     show_on_top = ['title', 'published', 'categories']
-    #raw_id_fields = []
 
     form = EntryForm
     ping_again = entry_admin_update_fn(_('queued'), {'pinging': Entry.QUEUED})
@@ -332,8 +357,10 @@ class CategoriesNavigationExtension(NavigationExtension):
     name = _('blog categories')
     
     def children(self, page, **kwargs):
-        for category in Category.objects.all():
-            yield PagePretender(
-                title=category.translation.name,
-                url='%scategory/%s/' % (page.get_absolute_url(), category.translation.slug)
-                )
+        for category in Category.objects.filter(level=0):
+            if category.entry_count_deep():
+                category.title=category.translation.title
+                yield PagePretender(
+                    title=category.translation.title,
+                    url=category.get_absolute_url()#'%scategory/%s/' % (page.get_absolute_url(), category.translation.slug)
+                    )
