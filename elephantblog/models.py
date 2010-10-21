@@ -71,7 +71,7 @@ class Category(base, TranslatedObjectMixin):
 
 
     def entry_count(self):
-        return Entry.objects.filter(categories=self).count()#, language=get_language() error launching Admin Category list
+        return Entry.objects.active().filter(categories=self).count()#, language=get_language() error launching Admin Category list
     entries=entry_count # former its was called entries
                       # for downward compatibility support the old name, too.
 
@@ -143,6 +143,17 @@ class CategoryAdmin(editor.TreeEditor):
     search_fields     = ['translations__title']
     list_filter = ('parent',)
     inlines           = [CategoryTranslationInline]
+
+
+    def actions_column(self, entry):
+        actions =[]
+
+        actions.insert(0, u'<a href="add/?parent=%s" title="%s"><img src="%simg/admin/icon_addlink.gif" alt="%s"></a>' % (
+            entry.pk, _('Add child category'), settings.ADMIN_MEDIA_PREFIX ,_('Add child category')))
+        return u' '.join(actions)
+    actions_column.allow_tags = True
+    actions_column.short_description = _('actions')
+
 
 class EntryManager(models.Manager):
 
@@ -311,7 +322,7 @@ class EntryForm(ModelForm):
 
 class EntryAdmin(editor.ItemEditor,  ImproveRawIdFieldsForm):
     date_hierarchy = 'published_on'
-    list_display = ['__unicode__', 'published', 'last_changed', 'isactive', 'active_status', 'published_on', 'user', 'pinging']
+    list_display = ['__unicode__', 'published', 'last_changed', 'isactive', 'active_status', 'published_on', 'user', 'pinging', 'actions_column']
     list_filter = ('published','published_on')
     search_fields = ('title', 'slug',)
     prepopulated_fields = {
@@ -346,6 +357,14 @@ class EntryAdmin(editor.ItemEditor,  ImproveRawIdFieldsForm):
         obj.user = request.user
         obj.save()
 
+
+    def actions_column(self, entry):
+        actions =[]
+        actions.insert(0, u'<a href="%s" title="%s"><img src="%simg/admin/selector-search.gif" alt="%s" /></a>' % (
+            entry.get_absolute_url(), _('View on site'), settings.ADMIN_MEDIA_PREFIX, _('View on site')))
+        return u' '.join(actions)
+    actions_column.allow_tags = True
+    actions_column.short_description = _('actions')
 
 Entry.register_regions(
                 ('main', _('Main content area')),
