@@ -20,6 +20,7 @@ urlpatterns = patterns('',
     url(r'^$', 'elephantblog.views.browse_entries'),
     url(r'^(category/(?P<category>[^/]+)/)?((?P<year>\d{4})/)?((?P<month>\d{2})/)?((?P<day>\d{2})/)?$', 'elephantblog.views.entry_list', entry_dict, name='elephantblog_list'),
     url(r'^browse/(?P<category_name>.*)', 'elephantblog.views.browse_entries', name='browse_categories'),
+    url(r'^tag/(?P<tag>.*)', 'elephantblog.views.entries_by_tag', name='entries_by_tag'),
     #url(r'^browse/', 'elephantblog.views.browse_entries', name='browse_entries'),
 )
 

@@ -1,5 +1,5 @@
 from datetime import date
-
+from django.db.models.query import EmptyQuerySet 
 from django.http import Http404
 from django.shortcuts import render_to_response, get_object_or_404
 from django.template import RequestContext
@@ -86,28 +86,31 @@ def entry_list(request, category=None, year=None, month=None, day=None, page=0,
       request,
       queryset = queryset,
       paginate_by = paginate_by,
-      #page = page,
+      page = page,
       template_name = template_name,
       extra_context = extra_context,
       **kwargs)
    
 def browse_entries(request, category_name='', year=None, month=None, day=None,
-               paginate_by=10, template_name='blog/category_list.html', limit=None,
-               language_code=None, **kwargs):
+               paginate_by=10, template_name='blog/category_list.html', limit=None,page=0,
+               language_code=None, wp_like=True, **kwargs):
     '''  
         Lets the user browse through the hierarchically blog categories.
         Shows sub categories and blog entries of given category-slug.
 
         @param category_name: category_slug would be a better name ;)
-        @param year, month, day, limit are currently UNUSED!
+        @param wp_like: If True entries of sub-categories shown, too.
+        @TODO year, month, day, limit are currently UNUSED!
+        @TODO: maybe category listing should be  included in 
+                Navigation extension.
     '''
+    #generate parent joins for filer query
     categories = category_name[:-1].split('/')
     deepest_cat = categories[-1:][0]
     parent_cat = categories[:-1]
 
     count=1
     parent_cat.reverse() 
-    #generate parent joins for filer query
     filer_dict={'translations__slug':deepest_cat}
     for parent in parent_cat:
         str=''
@@ -122,26 +125,87 @@ def browse_entries(request, category_name='', year=None, month=None, day=None,
     extra_context = getattr(kwargs, 'extra_context', {}) 
     if not category_name:
         #toplevel category list
-        queryset = Category.objects.filter(level=0)
+        extra_context['category_list'] = Category.objects.filter(level=0)
+        queryset=EmptyQuerySet(Entry)
     else:
         category = Category.objects.get(**filer_dict)
         extra_context['curr_category']=category
-
-        queryset = category.get_children()
+        extra_context.update({ 'comments' : settings.BLOG_COMMENTS,})
+        extra_context['category_list'] = category.get_children()
 
         #list entries of category
+        filter_args  = {
+            'categories__id': category.id,
+        }
+        if wp_like: # inspirated by wordpress
+            # show entries of subcategories, too.
+            descendants = category.get_descendants(include_self=True)
+            cat_ids = [ d.id for d in descendants ]
+            filter_args = {
+                'categories__id__in': cat_ids,
+            }
+
+        if year:
+            filter_args['published_on__year']=int(year)
+            extra_context.update({'drilldown_mode': 'year', 'title' : _('entries of the year')})
+        else:
+            year = 1
+        if month:
+            filter_args['published_on__month']=int(month)
+            extra_context.update({'drilldown_mode': 'month', 'title' : _('entries of the month')})
+        else:
+            month = 1
+        if day:
+            filter_args['published_on__day']=int(day)
+            extra_context.update({'drilldown_mode': 'day', 'title' : _('entries of the year')})
+        else:
+            day = 1
         try:
             language_code = request._feincms_page.language
-            extra_context['entry_list'] = Entry.objects.active().filter(language=language_code)
+            filter_args['language']=language_code
+            queryset = Entry.objects.active().filter(**filter_args)
         except (AttributeError, FieldError):
-            extra_context['entry_list']=Entry.objects.active().filter(categories__id =category.id)
+            queryset=Entry.objects.active().filter(**filter_args)
 
+        extra_context.update({'date':date(int(year), int(month), int(day))})
+
+        if limit:
+            queryset = queryset[:limit]
+
+    if settings.BLOG_LIST_PAGINATION:
+        paginate_by = settings.BLOG_LIST_PAGINATION
     return list_detail.object_list(
             request,
             queryset=queryset,
+            page=page,
             paginate_by = paginate_by,
             template_name=template_name,
             extra_context=extra_context,
             **kwargs)
 
 
+def entries_by_tag(request, tag='', template_name="blog/entry_list_tagged.html",
+                    paginate_by=10, page=0, **kwargs):
+    if tag:
+        tag =  tag[:-1] #remove slash of the end
+        try:
+            language_code = request._feincms_page.language
+            queryset=Entry.objects.active().filter(language=language_code, tags__icontains=tag)
+        except (AttributeError, FieldError):
+            queryset=Entry.objects.active().filter(tags__icontains=tag)
+    else:
+        queryset=Entry.objects.active()
+
+    if settings.BLOG_LIST_PAGINATION:
+        paginate_by=settings.BLOG_LIST_PAGINATION
+    extra_context={}
+    extra_context["tag"]=tag
+
+    return list_detail.object_list(
+                request,
+                queryset=queryset,
+                page=page,
+                paginate_by=paginate_by,
+                template_name=template_name,
+                extra_context=extra_context,
+                **kwargs)
